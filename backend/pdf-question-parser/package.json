@@ -1,0 +1,19 @@
+{
+  "name": "pdf-question-parser",
+  "version": "1.0.0",
+  "main": "dist/pdf-to-questions.js",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/pdf-to-questions.ts",
+    "parse": "ts-node src/pdf-to-questions.ts"
+  },
+  "dependencies": {
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}
