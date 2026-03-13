@@ -1,8 +1,8 @@
 version: "3.8"
 services:
-  msme_pg:
+  PostgresDBMS:
     image: postgres:15
-    container_name: msme_pg
+    container_name: PostgresDBMS
     environment:
       POSTGRES_PASSWORD: ChangeMe123!
       POSTGRES_USER: postgres
@@ -11,7 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ../backend/infra/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
 volumes:
   pgdata:
