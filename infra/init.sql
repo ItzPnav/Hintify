@@ -2,7 +2,7 @@
 -- NOTE: This script is executed as the default postgres user
 
 -- Create DB
-CREATE DATABASE hintify;
+CREATE DATABASE hintify_lanjha;
 
 -- Create user (app_owner) with password
 DO $$
