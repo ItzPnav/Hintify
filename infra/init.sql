@@ -1,10 +1,10 @@
 -- Create the app database and owner if not exists
 -- NOTE: This script is executed as the default postgres user
 
--- Create DB
-CREATE DATABASE hintify_lanjha;
+-- create DB
+CREATE DATABASE hintify_AI_qa_web;
 
--- Create user (app_owner) with password
+-- create user (app_owner) with password
 DO $$
 BEGIN
    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_owner') THEN
@@ -13,12 +13,13 @@ BEGIN
 END
 $$;
 
--- Grant privileges
-GRANT ALL PRIVILEGES ON DATABASE hintify TO app_owner;
+-- grant privileges
+GRANT ALL PRIVILEGES ON DATABASE hintify_AI_qa_web TO app_owner;
 
--- Connect to the app DB and create a simple hints log table
-\connect hintify;
+-- Connect to the app DB
+\connect hintify_AI_qa_web;
 
+-- Hint log table
 CREATE TABLE IF NOT EXISTS hints_log (
   id SERIAL PRIMARY KEY,
   question_id INTEGER,
@@ -27,3 +28,15 @@ CREATE TABLE IF NOT EXISTS hints_log (
   generated_text TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- PDF documents table — stores the raw PDF binary so students can view it
+CREATE TABLE IF NOT EXISTS pdf_documents (
+  id SERIAL PRIMARY KEY,
+  filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL DEFAULT 'application/pdf',
+  data BYTEA NOT NULL,
+  uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO app_owner;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO app_owner;
