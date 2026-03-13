@@ -49,11 +49,11 @@ export async function listQuestions(req: Request, res: Response) {
   }
 
   const parsed = await pdfParser.parsePdfBuffer(req.file!.buffer);
-const added = await questionStore.addMany(parsed);
+  const added = await questionStore.addMany(parsed);
 
-// ← Feed the raw text to the LLM context
-const rawText = await pdfParser.getRawText(req.file!.buffer);
-setDocumentContext(rawText);
+  // ← Feed the raw text to the LLM context
+  const rawText = await pdfParser.getRawText(req.file!.buffer);
+  setDocumentContext(rawText);
 
   console.log(`  ✓ Parsed ${added.length} questions from PDF`);
   return res.json({ added, message: "PDF uploaded and parsed successfully." });
