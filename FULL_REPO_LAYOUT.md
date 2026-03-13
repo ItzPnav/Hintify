@@ -1,11 +1,10 @@
 # File Tree: Hintify
 
-**Generated:** 3/12/2026, 6:44:10 PM
-**Root Path:** `c:\pnav\projects\Hintify`
-
 ```
 ├── 📁 backend
 │   ├── 📁 ${DATA_DIR}
+│   │   └── ⚙️ questions.json
+│   ├── 📁 data
 │   │   └── ⚙️ questions.json
 │   ├── 📁 pdf-question-parser
 │   │   ├── 📁 src
@@ -17,9 +16,11 @@
 │   │   ├── 📁 config
 │   │   │   └── 📄 db.ts
 │   │   ├── 📁 controllers
+│   │   │   ├── 📄 documents.controller.ts
 │   │   │   ├── 📄 hints.controller.ts
 │   │   │   └── 📄 questions.controller.ts
 │   │   ├── 📁 routes
+│   │   │   ├── 📄 documents.routes.ts
 │   │   │   ├── 📄 hints.routes.ts
 │   │   │   └── 📄 questions.routes.ts
 │   │   ├── 📁 services
@@ -27,6 +28,7 @@
 │   │   │   │   └── 📄 claude.service.ts
 │   │   │   ├── 📄 hintLog.service.ts
 │   │   │   ├── 📄 pdfParser.service.ts
+│   │   │   ├── 📄 pdfStore.service.ts
 │   │   │   └── 📄 questionStore.service.ts
 │   │   ├── 📁 types
 │   │   │   └── 📄 index.ts
@@ -65,6 +67,7 @@
 │   │   │   └── 📄 AppContext.tsx
 │   │   ├── 📁 services
 │   │   │   ├── 📄 aiService.ts
+│   │   │   ├── 📄 documentService.ts
 │   │   │   └── 📄 pdfService.ts
 │   │   ├── 📁 types
 │   │   │   └── 📄 index.ts
@@ -90,5 +93,8 @@
 │   └── 📄 setup_hintify_db.sql
 ├── 📝 BACKEND_EXPLAINED.md
 ├── 📝 FRONTEND_DOCUMENTATION.md
-└── 📝 FULL_REPO_LAYOUT.md
+├── 📝 FULL_REPO_LAYOUT.md
+├── 📝 README.md
+├── ⚙️ package-lock.json
+└── ⚙️ package.json
 ```

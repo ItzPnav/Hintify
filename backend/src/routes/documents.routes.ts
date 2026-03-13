@@ -3,7 +3,7 @@ import { getLatestDocument } from "../controllers/documents.controller";
 
 const router = Router();
 
-// GET /api/documents/latest — serves the raw PDF binary
 router.get("/latest", getLatestDocument);
+router.head("/latest", getLatestDocument); // for hasDocument() check
 
 export default router;

@@ -1,152 +1,94 @@
 import pdfParse from "pdf-parse";
 
-interface Question {
-  id: number;
-  questionText: string;
-  options: string[];
-  answer: string;
-  hint1: string;
-  hint2: string;
-  solution: string;
-}
-
-interface RawQuestionBlock {
-  id: number;
-  rawLines: string[];
-}
-
-function normalizeLine(line: string): string {
-  return line.replace(/\s+/g, " ").trim();
-}
-
-function splitIntoLines(text: string): string[] {
-  const rawLines = text.split(/\r?\n/);
-  return rawLines
-    .map(normalizeLine)
-    .filter((line) => line.length > 0);
-}
-
-function extractRawQuestionBlocks(lines: string[]): RawQuestionBlock[] {
-  const questionStartRegex =
-    /^\s*(?:Q(?:uestion)?\.?\s*)?(\d+)[\.\)\]]\s+(.*)$/i;
-
-  const blocks: RawQuestionBlock[] = [];
-  let currentBlock: RawQuestionBlock | null = null;
-
-  lines.forEach((line) => {
-    const match = line.match(questionStartRegex);
-
-    if (match) {
-      const id = parseInt(match[1], 10);
-      const firstTextPart = match[2];
-
-      if (currentBlock) {
-        blocks.push(currentBlock);
-      }
-
-      currentBlock = {
-        id,
-        rawLines: [firstTextPart]
-      };
-    } else if (currentBlock) {
-      currentBlock.rawLines.push(line);
-    }
-  });
-
-  if (currentBlock) {
-    blocks.push(currentBlock);
-  }
-
-  return blocks;
-}
-
-function parseQuestionBlock(block: RawQuestionBlock): Question | null {
-  const optionRegex = /^\s*([A-Da-d])[\.\)\]]\s+(.*)$/;
-  const answerRegex = /\b(?:Ans(?:wer)?\.?\s*[:\-]\s*)([A-Da-d1-4])/i;
-
-  const options: string[] = [];
-  const optionMap: Record<string, string> = {};
-
-  let answerText = "";
-  let firstOptionIndex = -1;
-
-  block.rawLines.forEach((line, idx) => {
-    const optionMatch = line.match(optionRegex);
-    const answerMatch = line.match(answerRegex);
-
-    if (optionMatch) {
-      const letter = optionMatch[1].toUpperCase();
-      const text = optionMatch[2].trim();
-
-      if (firstOptionIndex === -1) {
-        firstOptionIndex = idx;
-      }
-
-      options.push(text);
-      optionMap[letter] = text;
-    } else if (answerMatch) {
-      answerText = answerMatch[1].toUpperCase();
-    }
-  });
-
-  let questionText = "";
-  if (firstOptionIndex !== -1) {
-    const qLines = block.rawLines.slice(0, firstOptionIndex);
-    questionText = qLines.join(" ");
-  } else {
-    questionText = block.rawLines.join(" ");
-  }
-  questionText = normalizeLine(questionText);
-
-  if (!questionText) {
-    return null;
-  }
-
-  let answer = "";
-  if (answerText) {
-    if (/[A-D]/i.test(answerText)) {
-      const letter = answerText.toUpperCase();
-      if (optionMap[letter]) {
-        answer = optionMap[letter];
-      }
-    } else if (/[1-4]/.test(answerText)) {
-      const index = parseInt(answerText, 10) - 1;
-      if (options[index]) {
-        answer = options[index];
-      }
-    }
-  }
-
-  return {
-    id: block.id,
-    questionText,
-    options,
-    answer,
-    hint1: "",
-    hint2: "",
-    solution: ""
-  };
-}
-
-/**
- * Parse PDF buffer and extract questions
- */
 export default {
-  async parsePdfBuffer(buffer: Buffer): Promise<Question[]> {
+  async getRawText(buffer: Buffer): Promise<string> {
     const data = await pdfParse(buffer);
-    const text = data.text || "";
+    return data.text || "";
+  },
 
-    const lines = splitIntoLines(text);
-    const blocks = extractRawQuestionBlocks(lines);
+  async parsePdfBuffer(buffer: Buffer) {
+    const data = await pdfParse(buffer);
+    const raw = data.text || "";
 
-    const questions: Question[] = [];
-    for (const block of blocks) {
-      const q = parseQuestionBlock(block);
-      if (q) {
-        questions.push(q);
+    // Normalise whitespace
+    const text = raw
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .replace(/\u00ad|\u200b/g, "")
+      .replace(/[ \t]{2,}/g, " ");
+
+    const lines = text.split("\n");
+    const blocks: string[] = [];
+    let current: string[] = [];
+
+    // Matches: Q.1  Q.2  Q.10  Q.1.  Q1  (at start of line)
+    const Q_START = /^[ \t]*Q\.?\s*(\d{1,3})\b/i;
+
+    for (const line of lines) {
+      if (Q_START.test(line) && current.length > 0) {
+        blocks.push(current.join("\n"));
+        current = [line];
+      } else {
+        current.push(line);
       }
     }
+    if (current.length > 0) blocks.push(current.join("\n"));
 
-    return questions;
-  }
+    const parsed: any[] = [];
+
+    for (const block of blocks) {
+      const trimmed = block.trim();
+      if (!trimmed) continue;
+
+      // Extract question number and body
+      const headerMatch = trimmed.match(/^[ \t]*Q\.?\s*(\d{1,3})\b[.):\s]?\s*([\s\S]+)/i);
+      if (!headerMatch) continue;
+
+      const qnum = Number(headerMatch[1]);
+      const body = headerMatch[2].trim();
+
+      // Split off options: (A) (B) (C) (D)  or  A)  A.
+      const bodyLines = body.split("\n");
+      const questionLines: string[] = [];
+      const optionLines: string[] = [];
+      let inOptions = false;
+
+      for (const l of bodyLines) {
+        if (!inOptions && /^[ \t]*(?:\([A-Da-d]\)|[A-Da-d][).:])\s+/.test(l)) {
+          inOptions = true;
+        }
+        if (inOptions) {
+          optionLines.push(l);
+        } else {
+          questionLines.push(l);
+        }
+      }
+
+      const questionText = questionLines
+        .join(" ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+
+      const options = optionLines
+        .map((o) => o.replace(/^[ \t]*(?:\([A-Da-d]\)|[A-Da-d][).:])[ \t]*/i, "").trim())
+        .filter(Boolean);
+
+      if (!questionText) continue;
+
+      parsed.push({ id: qnum, questionText, options });
+    }
+
+    // De-duplicate and sort
+    const seen = new Set<number>();
+    const deduped = parsed.filter((q) => {
+      if (seen.has(q.id)) return false;
+      seen.add(q.id);
+      return true;
+    });
+
+    deduped.sort((a, b) => a.id - b.id);
+
+    console.log(`Parsed questions: ${deduped.length} questions`);
+    return deduped;
+  },
 };

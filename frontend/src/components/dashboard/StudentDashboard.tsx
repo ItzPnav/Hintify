@@ -7,7 +7,7 @@ import { DocumentService } from '../../services/documentService';
 import { Message } from '../../types';
 
 export function StudentDashboard() {
-  const { user, documentUploaded, hintRequests, addHintRequest, updateHintRequest } = useApp();
+  const { user, hintRequests, addHintRequest, updateHintRequest } = useApp();
 
   // ── Chat state ─────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>([]);
@@ -21,16 +21,13 @@ export function StudentDashboard() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
 
-  // ── Load PDF when document is marked as uploaded ───────────────────────────
+  // ── Always load PDF from backend on mount ─────────────────────────────────
+  // Check backend directly — don't rely on documentUploaded flag which can
+  // be lost on page refresh or after a backend restart.
   useEffect(() => {
     let objectUrl: string | null = null;
 
     const loadPdf = async () => {
-      if (!documentUploaded) {
-        setPdfUrl(null);
-        return;
-      }
-
       setPdfLoading(true);
       setPdfError(null);
 
@@ -38,7 +35,12 @@ export function StudentDashboard() {
         objectUrl = await DocumentService.getLatestPdfUrl();
         setPdfUrl(objectUrl);
       } catch (err: any) {
-        setPdfError(err?.message ?? 'Failed to load document.');
+        // 404 = no document yet, show empty state silently
+        if (err?.message?.includes('No document')) {
+          setPdfUrl(null);
+        } else {
+          setPdfError(err?.message ?? 'Failed to load document.');
+        }
       } finally {
         setPdfLoading(false);
       }
@@ -46,11 +48,10 @@ export function StudentDashboard() {
 
     loadPdf();
 
-    // Revoke the blob URL when component unmounts or PDF changes
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [documentUploaded]);
+  }, []); // run once on mount
 
   // ── Auto-scroll chat to bottom ─────────────────────────────────────────────
   useEffect(() => {
@@ -320,7 +321,7 @@ export function StudentDashboard() {
               </div>
             )}
 
-            {!documentUploaded && !pdfLoading && !pdfError && (
+            {!pdfUrl && !pdfLoading && !pdfError && (
               <div className="flex flex-col items-center justify-center h-full gap-3 px-8 text-center">
                 <FileText className="w-12 h-12 text-soft-gray/40" />
                 <p className="text-soft-gray font-medium">No document yet</p>
