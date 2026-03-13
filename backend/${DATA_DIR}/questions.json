@@ -3,7 +3,8 @@
     {
       "id": 1,
       "questionText": "– Q.5 Carry ONE mark Each",
-      "options": []
+      "options": [],
+      "hint1": "Think about the basic arithmetic operations like addition, subtraction, multiplication, and division. Start with simple problems."
     },
     {
       "id": 2,

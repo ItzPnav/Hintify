@@ -9,11 +9,20 @@ import { Message } from '../../types';
 export function StudentDashboard() {
   const { user, hintRequests, addHintRequest, updateHintRequest } = useApp();
 
+  // ── Left panel tab ─────────────────────────────────────────────────────────
+  const [leftTab, setLeftTab] = useState<'chat' | 'hints'>('chat');
+
   // ── Chat state ─────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // ── Quick Hints state ──────────────────────────────────────────────────────
+  const [quickQuestion, setQuickQuestion] = useState<number>(1);
+  const [quickResponse, setQuickResponse] = useState<string>('');
+  const [quickLoading, setQuickLoading] = useState(false);
+  const [quickType, setQuickType] = useState<'hint1' | 'hint2' | 'solution' | null>(null);
 
   // ── PDF viewer state ───────────────────────────────────────────────────────
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -21,9 +30,7 @@ export function StudentDashboard() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
 
-  // ── Always load PDF from backend on mount ─────────────────────────────────
-  // Check backend directly — don't rely on documentUploaded flag which can
-  // be lost on page refresh or after a backend restart.
+  // ── Load PDF from backend on mount ────────────────────────────────────────
   useEffect(() => {
     let objectUrl: string | null = null;
 
@@ -35,7 +42,6 @@ export function StudentDashboard() {
         objectUrl = await DocumentService.getLatestPdfUrl();
         setPdfUrl(objectUrl);
       } catch (err: any) {
-        // 404 = no document yet, show empty state silently
         if (err?.message?.includes('No document')) {
           setPdfUrl(null);
         } else {
@@ -51,14 +57,14 @@ export function StudentDashboard() {
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, []); // run once on mount
+  }, []);
 
-  // ── Auto-scroll chat to bottom ─────────────────────────────────────────────
+  // ── Auto-scroll chat ───────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // ── Send message / hint logic ──────────────────────────────────────────────
+  // ── Chat send logic ────────────────────────────────────────────────────────
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
@@ -80,17 +86,14 @@ export function StudentDashboard() {
       const qNum = AIService.extractQuestionNumber(trimmed);
 
       let hintLevel: 'first' | 'second' | 'solution' = 'first';
-      let requestId: string | null = null;
 
       if (isHelp && qNum && user) {
-        // Find existing hint request for this question
         const existing = hintRequests.find(
           (r) => r.studentId === user.id && r.questionNumber === qNum
         );
 
         if (!existing) {
-          // First time asking about this question
-          const newRequest = {
+          addHintRequest({
             id: Date.now().toString(),
             studentId: user.id,
             studentName: user.username,
@@ -100,20 +103,14 @@ export function StudentDashboard() {
             secondHintAsked: false,
             solutionGiven: false,
             timestamp: new Date(),
-          };
-          addHintRequest(newRequest);
-          requestId = newRequest.id;
+          });
           hintLevel = 'first';
         } else if (isMoreHelp && existing.firstHintAsked && !existing.secondHintAsked) {
           updateHintRequest(existing.id, { secondHintAsked: true });
-          requestId = existing.id;
           hintLevel = 'second';
         } else if (isMoreHelp && existing.secondHintAsked && !existing.solutionGiven) {
           updateHintRequest(existing.id, { solutionGiven: true });
-          requestId = existing.id;
           hintLevel = 'solution';
-        } else {
-          hintLevel = 'first';
         }
       }
 
@@ -125,23 +122,26 @@ export function StudentDashboard() {
         solution: 'solution' as const,
       };
 
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        text: responseText,
-        sender: 'ai',
-        timestamp: new Date(),
-        type: typeMap[hintLevel],
-      };
-
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (err) {
-      const errMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        text: 'Sorry, something went wrong. Please try again.',
-        sender: 'ai',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errMsg]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          text: responseText,
+          sender: 'ai',
+          timestamp: new Date(),
+          type: typeMap[hintLevel],
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          text: 'Sorry, something went wrong. Please try again.',
+          sender: 'ai',
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -154,6 +154,45 @@ export function StudentDashboard() {
     }
   };
 
+  // ── Quick Hints handler ────────────────────────────────────────────────────
+  const handleQuickHint = async (level: 'first' | 'second' | 'solution') => {
+    setQuickLoading(true);
+    setQuickResponse('');
+    setQuickType(level === 'first' ? 'hint1' : level === 'second' ? 'hint2' : 'solution');
+
+    try {
+      const res = await AIService.generateResponse(`question ${quickQuestion}`, level);
+      setQuickResponse(res);
+
+      // Also track in hint requests
+      if (user) {
+        const existing = hintRequests.find(
+          (r) => r.studentId === user.id && r.questionNumber === quickQuestion
+        );
+        if (!existing) {
+          addHintRequest({
+            id: Date.now().toString(),
+            studentId: user.id,
+            studentName: user.username,
+            questionNumber: quickQuestion,
+            question: `Quick hint Q${quickQuestion}`,
+            firstHintAsked: level === 'first',
+            secondHintAsked: level === 'second',
+            solutionGiven: level === 'solution',
+            timestamp: new Date(),
+          });
+        } else {
+          if (level === 'second') updateHintRequest(existing.id, { secondHintAsked: true });
+          if (level === 'solution') updateHintRequest(existing.id, { solutionGiven: true });
+        }
+      }
+    } catch {
+      setQuickResponse('Error generating hint. Please try again.');
+    } finally {
+      setQuickLoading(false);
+    }
+  };
+
   const handleDownload = () => {
     if (!pdfUrl) return;
     const a = document.createElement('a');
@@ -162,7 +201,7 @@ export function StudentDashboard() {
     a.click();
   };
 
-  // ── Message bubble styling ─────────────────────────────────────────────────
+  // ── Styling helpers ────────────────────────────────────────────────────────
   const getAiMsgStyle = (type?: string) => {
     switch (type) {
       case 'hint1':    return 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800';
@@ -181,88 +220,185 @@ export function StudentDashboard() {
     }
   };
 
+  const quickBtnConfig = [
+    {
+      level: 'first' as const,
+      label: 'First Hint',
+      sublabel: 'gentle nudge',
+      className: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40',
+    },
+    {
+      level: 'second' as const,
+      label: 'Second Hint',
+      sublabel: 'stronger guide',
+      className: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700 text-yellow-800 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/40',
+    },
+    {
+      level: 'solution' as const,
+      label: 'Full Solution',
+      sublabel: 'show answer',
+      className: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700 text-green-800 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40',
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-off-white dark:bg-dark-tone flex flex-col">
       <Header />
 
       <main className="flex-1 flex gap-4 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 overflow-hidden">
 
-        {/* ── LEFT: Chat ───────────────────────────────────────────────────── */}
+        {/* ── LEFT: Tabbed panel ────────────────────────────────────────────── */}
         <div className="flex flex-col w-full md:w-[420px] flex-shrink-0 bg-white dark:bg-warm-gray rounded-2xl shadow-xl overflow-hidden">
-          {/* Chat header */}
-          <div className="px-5 py-4 border-b border-soft-gray/20">
-            <h2 className="font-bold text-warm-gray dark:text-off-white text-lg">Ask for a Hint</h2>
-            <p className="text-xs text-soft-gray mt-0.5">
-              Type a question number to get a progressive hint
-            </p>
+
+          {/* ── Tab bar (Google-style) ─────────────────────────────────────── */}
+          <div className="flex border-b border-soft-gray/20">
+            {(['chat', 'hints'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setLeftTab(tab)}
+                className={`flex-1 py-3 text-sm font-medium transition-all duration-150 border-b-2 ${
+                  leftTab === tab
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-soft-gray hover:text-warm-gray dark:hover:text-off-white'
+                }`}
+              >
+                {tab === 'chat' ? 'Chat' : 'Quick Hints'}
+              </button>
+            ))}
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0">
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                <div className="w-14 h-14 bg-accent/10 rounded-full flex items-center justify-center mb-3">
-                  <span className="text-2xl">💡</span>
-                </div>
-                <p className="text-soft-gray text-sm">
-                  Ask about a question to get your first hint!
-                </p>
-                <p className="text-soft-gray/60 text-xs mt-1">
-                  e.g. "Help with question 3"
-                </p>
-              </div>
-            )}
-
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {msg.sender === 'user' ? (
-                  <div className="max-w-[80%] bg-accent text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm">
-                    {msg.text}
-                  </div>
-                ) : (
-                  <div className={`max-w-[88%] rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm ${getAiMsgStyle(msg.type)}`}>
-                    <p className="text-xs font-semibold text-soft-gray mb-1">{getAiLabel(msg.type)}</p>
-                    <p className="text-warm-gray dark:text-off-white whitespace-pre-wrap">{msg.text}</p>
+          {/* ── CHAT PANEL ────────────────────────────────────────────────── */}
+          {leftTab === 'chat' && (
+            <>
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0">
+                {messages.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                    <div className="w-14 h-14 bg-accent/10 rounded-full flex items-center justify-center mb-3">
+                      <span className="text-2xl">💡</span>
+                    </div>
+                    <p className="text-soft-gray text-sm">Ask about a question to get your first hint!</p>
+                    <p className="text-soft-gray/60 text-xs mt-1">e.g. "Help with question 3"</p>
                   </div>
                 )}
-              </div>
-            ))}
 
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-soft-gray/10 rounded-2xl rounded-tl-sm px-4 py-3">
-                  <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    {msg.sender === 'user' ? (
+                      <div className="max-w-[80%] bg-accent text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm">
+                        {msg.text}
+                      </div>
+                    ) : (
+                      <div className={`max-w-[88%] rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm ${getAiMsgStyle(msg.type)}`}>
+                        <p className="text-xs font-semibold text-soft-gray mb-1">{getAiLabel(msg.type)}</p>
+                        <p className="text-warm-gray dark:text-off-white whitespace-pre-wrap">{msg.text}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-soft-gray/10 rounded-2xl rounded-tl-sm px-4 py-3">
+                      <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Chat input */}
+              <div className="px-4 py-3 border-t border-soft-gray/20">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    disabled={isLoading}
+                    placeholder="e.g. Help with question 2"
+                    className="flex-1 bg-soft-gray/10 dark:bg-dark-tone/50 border border-soft-gray/20 rounded-xl px-4 py-2.5 text-sm text-warm-gray dark:text-off-white placeholder-soft-gray focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50"
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={isLoading || !input.trim()}
+                    className="w-10 h-10 bg-accent hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-colors flex-shrink-0"
+                  >
+                    <Send className="w-4 h-4 text-white" />
+                  </button>
                 </div>
               </div>
-            )}
+            </>
+          )}
 
-            <div ref={messagesEndRef} />
-          </div>
+          {/* ── QUICK HINTS PANEL ─────────────────────────────────────────── */}
+          {leftTab === 'hints' && (
+            <div className="flex flex-col flex-1 overflow-y-auto px-4 py-4 gap-4">
 
-          {/* Input */}
-          <div className="px-4 py-3 border-t border-soft-gray/20">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isLoading}
-                placeholder="e.g. Help with question 2"
-                className="flex-1 bg-soft-gray/10 dark:bg-dark-tone/50 border border-soft-gray/20 rounded-xl px-4 py-2.5 text-sm text-warm-gray dark:text-off-white placeholder-soft-gray focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50"
-              />
-              <button
-                onClick={handleSend}
-                disabled={isLoading || !input.trim()}
-                className="w-10 h-10 bg-accent hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-colors flex-shrink-0"
-              >
-                <Send className="w-4 h-4 text-white" />
-              </button>
+              {/* Question selector */}
+              <div>
+                <label className="text-xs text-soft-gray mb-1.5 block">Select question number</label>
+                <select
+                  value={quickQuestion}
+                  onChange={(e) => {
+                    setQuickQuestion(Number(e.target.value));
+                    setQuickResponse('');
+                    setQuickType(null);
+                  }}
+                  className="w-full bg-soft-gray/10 dark:bg-dark-tone/50 border border-soft-gray/20 rounded-xl px-4 py-2.5 text-sm text-warm-gray dark:text-off-white focus:outline-none focus:ring-2 focus:ring-accent/40"
+                >
+                  {Array.from({ length: 30 }, (_, i) => (
+                    <option key={i + 1} value={i + 1}>
+                      Question {i + 1}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Hint level buttons */}
+              <div>
+                <label className="text-xs text-soft-gray mb-1.5 block">Pick hint level</label>
+                <div className="flex flex-col gap-2">
+                  {quickBtnConfig.map(({ level, label, sublabel, className }) => (
+                    <button
+                      key={level}
+                      disabled={quickLoading}
+                      onClick={() => handleQuickHint(level)}
+                      className={`w-full px-4 py-3 rounded-xl border text-left text-sm font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+                    >
+                      {label}
+                      <span className="font-normal opacity-70 ml-1">— {sublabel}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Response area */}
+              <div className={`flex-1 rounded-xl p-4 text-sm min-h-[120px] transition-all ${
+                quickType ? getAiMsgStyle(quickType) : 'bg-soft-gray/10 border border-soft-gray/20'
+              }`}>
+                {quickLoading ? (
+                  <div className="flex items-center gap-2 text-soft-gray">
+                    <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                    <span>Generating...</span>
+                  </div>
+                ) : quickResponse ? (
+                  <>
+                    <p className="text-xs font-semibold text-soft-gray mb-2">{getAiLabel(quickType ?? undefined)}</p>
+                    <p className="text-warm-gray dark:text-off-white whitespace-pre-wrap">{quickResponse}</p>
+                  </>
+                ) : (
+                  <p className="text-soft-gray/60">
+                    Select a question and click a hint level above to get started.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* ── RIGHT: PDF Viewer ─────────────────────────────────────────────── */}
@@ -305,7 +441,7 @@ export function StudentDashboard() {
             )}
           </div>
 
-          {/* PDF content area */}
+          {/* PDF content */}
           <div className="flex-1 overflow-auto bg-soft-gray/5 min-h-0">
             {pdfLoading && (
               <div className="flex flex-col items-center justify-center h-full gap-3">
@@ -325,9 +461,7 @@ export function StudentDashboard() {
               <div className="flex flex-col items-center justify-center h-full gap-3 px-8 text-center">
                 <FileText className="w-12 h-12 text-soft-gray/40" />
                 <p className="text-soft-gray font-medium">No document yet</p>
-                <p className="text-soft-gray/60 text-sm">
-                  Your teacher hasn't uploaded a document yet.
-                </p>
+                <p className="text-soft-gray/60 text-sm">Your teacher hasn't uploaded a document yet.</p>
               </div>
             )}
 
