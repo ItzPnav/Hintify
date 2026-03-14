@@ -4,7 +4,7 @@
       "id": 1,
       "questionText": "– Q.5 Carry ONE mark Each",
       "options": [],
-      "hint1": "Focus on the map interpretation and the relationships between the points."
+      "hint1": "Think about the given map and directions. What does the layout of the roads and buildings suggest about the relationships between different places?"
     },
     {
       "id": 2,
@@ -40,7 +40,8 @@
         "Only (4) is true.",
         "Computer Science and Information Technology (CS1)",
         "Organising Institute: IIT Roorkee Page 5 of 64"
-      ]
+      ],
+      "hint1": "The key concepts here are family relationships and relationships among siblings and parents. Think about the relationships between Q, S, R, and T in terms of blood relations."
     },
     {
       "id": 5,
@@ -65,7 +66,8 @@
         "Canteen",
         "Computer Science and Information Technology (CS1)",
         "Organising Institute: IIT Roorkee Page 6 of 64"
-      ]
+      ],
+      "hint1": "The map indicates locations based on cardinal directions (north, south, west, east), which suggests that the map uses a grid or coordinate system to show relationships between places. This type of spatial reasoning is typically related to geographical or map-based concepts."
     },
     {
       "id": 6,
@@ -119,8 +121,7 @@
         "(IV)",
         "Computer Science and Information Technology (CS1)",
         "Organising Institute: IIT Roorkee Page 10 of 64"
-      ],
-      "hint1": "This problem involves understanding how folds and cuts affect the positioning of elements within a folded paper. Focus on how the folds alter the relative positions of the square's corners."
+      ]
     },
     {
       "id": 10,
@@ -175,8 +176,7 @@
         "24",
         "Computer Science and Information Technology (CS1)",
         "Organising Institute: IIT Roorkee Page 15 of 64"
-      ],
-      "hint1": "The key concept here is understanding the structure of a page table and how it relates to the logical and physical address spaces. Focus on how the page size, page size, and physical address bits interact to determine the maximum number of entries in the page table."
+      ]
     },
     {
       "id": 15,
@@ -453,7 +453,8 @@
     {
       "id": 29,
       "questionText": "Suppose in a multiprogramming environment, the following C program segment is executed. A process goes into I/O queue whenever an I/O related operation is performed. Assume that there will always be a context switch whenever a process requests for an I/O, and also whenever the process returns from an I/O. The number of times the process will enter the ready queue during its lifetime (not counting the time the process enters the ready queue when it is run initially) is _______. (Answer in integer) int main() { int x=0,i=0; scanf(\"%d\",&x); for(i=0; i<20; i++) { x = x+20; printf(\"%d\\n\",x); } return 0; } Computer Science and Information Technology (CS1) Organising Institute: IIT Roorkee Page 30 of 64",
-      "options": []
+      "options": [],
+      "hint1": "The key concept here is understanding how multiprogramming affects the scheduling of processes and their interactions with the I/O queue."
     },
     {
       "id": 30,

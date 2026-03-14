@@ -254,15 +254,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    setDocumentUploaded(false);
-    setUploadedDocument(null);
-    setDocumentText('');
-    setHintRequests([]);
-    [
-      'hintify_user', 'hintify_session_expiry',
-      'hintify_document_uploaded', 'hintify_uploaded_document',
-      'hintify_document_text', 'hintify_hint_requests', 'hintify_question_count',
-    ].forEach(k => localStorage.removeItem(k));
+    // Only remove session information
+    localStorage.removeItem('hintify_user');
+    localStorage.removeItem('hintify_session_expiry');
   };
 
   const signup = async (username: string, email: string, password: string, role: UserRole) => {
