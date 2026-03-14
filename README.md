@@ -252,6 +252,6 @@ MIT License — use freely.
 
 ---
 
-# 🚀 Made with passion by **Akhil**
+# 🚀 Made with passion for my brother (Akhil)
 
 > *Hintify helps students think before they look — one hint at a time.*
