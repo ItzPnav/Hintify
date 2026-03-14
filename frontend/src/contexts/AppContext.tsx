@@ -254,7 +254,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    // Only remove session information
+    // Only remove session information on logout if it was set to persist (i.e., "Remember Me" was checked)
     localStorage.removeItem('hintify_user');
     localStorage.removeItem('hintify_session_expiry');
   };
