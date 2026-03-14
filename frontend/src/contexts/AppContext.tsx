@@ -31,6 +31,7 @@ interface AppContextType {
   hintRequests: HintRequest[];
   addHintRequest: (request: HintRequest) => void;
   updateHintRequest: (id: string, updates: Partial<HintRequest>) => void;
+  setHintRequests: (requests: HintRequest[]) => void;
   getStudentHintStats: () => StudentHintStats[];
   isLoggedIn: boolean;
   login: (email: string, password: string, role: UserRole, rememberMe: boolean) => Promise<boolean>;
@@ -195,7 +196,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mockUsers.filter(u => u.role === 'student').forEach(student => {
       const questionHints: StudentHintStats['questionHints'] = {};
       for (let q = 1; q <= questionCount; q++) {
-        questionHints[q] = { firstHint: false, secondHint: false };
+        questionHints[q] = { firstHint: false, secondHint: false, solutionGiven: false };
       }
       studentStats[student.id] = {
         studentId: student.id,
@@ -209,7 +210,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const stats = studentStats[request.studentId];
       if (!stats) return;
       if (!stats.questionHints[request.questionNumber]) {
-        stats.questionHints[request.questionNumber] = { firstHint: false, secondHint: false };
+        stats.questionHints[request.questionNumber] = { firstHint: false, secondHint: false, solutionGiven: false };
       }
       if (request.firstHintAsked) {
         stats.questionHints[request.questionNumber].firstHint = true;
@@ -217,6 +218,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       if (request.secondHintAsked) {
         stats.questionHints[request.questionNumber].secondHint = true;
+        stats.totalHints++;
+      }
+      if (request.solutionGiven) {
+        stats.questionHints[request.questionNumber].solutionGiven = true;
         stats.totalHints++;
       }
     });
@@ -294,6 +299,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isLoggedIn,
       login, signup, forgotPassword, logout,
       onDocumentUploaded,
+      setHintRequests,
     }}>
       {children}
     </AppContext.Provider>

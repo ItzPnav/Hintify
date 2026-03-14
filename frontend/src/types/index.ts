@@ -13,7 +13,7 @@ export interface HintRequest {
 export interface StudentHintStats {
   studentId: string;
   studentName: string;
-  questionHints: { [questionNumber: number]: { firstHint: boolean; secondHint: boolean } };
+  questionHints: { [questionNumber: number]: { firstHint: boolean; secondHint: boolean; solutionGiven: boolean } };
   totalHints: number;
 }
 

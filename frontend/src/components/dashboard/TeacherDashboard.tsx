@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, Users, BarChart3, TrendingUp, Hash } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { Header } from '../layout/Header';
@@ -8,21 +8,35 @@ import { AIService } from '../../services/aiService';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+// ── localStorage key for tab persistence ────────────────────────────────────
+const TAB_KEY = 'hintify_teacher_tab';
+
 export function TeacherDashboard() {
   const {
     documentUploaded,
-    setDocumentUploaded,
-    setUploadedDocument,
-    setDocumentText,
+    uploadedDocument,
     questionCount,
     getStudentHintStats,
     onDocumentUploaded,
+    setDocumentUploaded,
+    setUploadedDocument,
+    setDocumentText,
+    setHintRequests,
   } = useApp();
 
-  const [isUploading, setIsUploading] = useState(false);
+  const [isUploading, setIsUploading]   = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'upload' | 'analytics'>('upload');
 
+  // ── Persist active tab across refreshes ─────────────────────────────────
+  const [activeTab, setActiveTab] = useState<'upload' | 'analytics'>(
+    () => (localStorage.getItem(TAB_KEY) as 'upload' | 'analytics') ?? 'upload'
+  );
+
+  useEffect(() => {
+    localStorage.setItem(TAB_KEY, activeTab);
+  }, [activeTab]);
+
+  // ── PDF upload handler ───────────────────────────────────────────────────
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -30,10 +44,8 @@ export function TeacherDashboard() {
     setIsUploading(true);
 
     try {
-      // Upload PDF to backend — this also clears previous questions + hints_log
       const extractedText = await PDFService.extractTextFromFile(file);
 
-      // Sync the question count from backend after upload
       let count = 0;
       try {
         const countRes = await fetch(`${API_BASE}/api/questions/count`);
@@ -42,35 +54,48 @@ export function TeacherDashboard() {
           count = typeof data.count === 'number' ? data.count : 0;
         }
       } catch {
-        // Fallback: count "Question N:" occurrences in extracted text
         const matches = extractedText.match(/Question\s+\d+:/gi);
         count = matches ? matches.length : 0;
       }
 
-      // Update AI service document context
       AIService.setDocumentText(extractedText);
 
-      // One call: sets document state + questionCount + clears stale hint data
+      // Single call: sets document state + questionCount + clears stale hints
       onDocumentUploaded(file.name, extractedText, count);
 
       setIsUploading(false);
       setUploadSuccess(true);
-
-      setTimeout(() => {
-        setUploadSuccess(false);
-      }, 3000);
+      setTimeout(() => setUploadSuccess(false), 3000);
     } catch (error) {
       console.error('Upload error:', error);
       setIsUploading(false);
       alert('Failed to process PDF. Please try again.');
     }
+
+    // Reset file input so the same file can be re-uploaded if needed
+    event.target.value = '';
   };
 
-  const studentStats = getStudentHintStats();
+  // ── "Upload New Document" — full clean slate ─────────────────────────────
+  // Previously this called setDocumentUploaded / setUploadedDocument / setDocumentText
+  // directly, which left stale hintRequests in localStorage.
+  // Now we go through the same helpers AppContext.logout() uses so nothing leaks.
+  const handleReplaceDocument = () => {
+    setDocumentUploaded(false);
+    setUploadedDocument(null);
+    setDocumentText('');
+    // Clear hint analytics so the new PDF starts with a clean slate
+    setHintRequests([]);
+    localStorage.removeItem('hintify_hint_requests');
+    localStorage.removeItem('hintify_hint_timers'); // clear student timers too
+    setUploadSuccess(false);
+    setActiveTab('upload');
+  };
 
-  // Build question number list [1, 2, …, questionCount]
+  const studentStats   = getStudentHintStats();
   const questionNumbers = Array.from({ length: questionCount }, (_, i) => i + 1);
 
+  // ── Analytics table ──────────────────────────────────────────────────────
   const AnalyticsTable = () => (
     <div className="bg-white dark:bg-warm-gray rounded-2xl shadow-xl overflow-hidden">
       <div className="p-6 border-b border-soft-gray/20">
@@ -105,7 +130,9 @@ export function TeacherDashboard() {
           <div className="p-12 text-center">
             <BarChart3 className="w-12 h-12 text-soft-gray mx-auto mb-4" />
             <h3 className="text-lg font-medium text-soft-gray mb-2">No Questions Parsed</h3>
-            <p className="text-soft-gray">The PDF was uploaded but no questions were detected. Try a different document.</p>
+            <p className="text-soft-gray">
+              The PDF was uploaded but no questions were detected. Try a different document.
+            </p>
           </div>
         )}
 
@@ -114,7 +141,7 @@ export function TeacherDashboard() {
           <div key={student.studentId} className="p-6 border-b border-soft-gray/10 last:border-b-0">
             <h3 className="text-lg font-semibold text-warm-gray dark:text-off-white mb-4 flex items-center space-x-2">
               <Users className="w-5 h-5 text-accent" />
-              <span>{student.studentName} Hint Count</span>
+              <span>{student.studentName}</span>
             </h3>
 
             <div className="overflow-hidden rounded-lg border border-soft-gray/20">
@@ -122,42 +149,43 @@ export function TeacherDashboard() {
                 <thead className="bg-soft-gray/10">
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-warm-gray dark:text-off-white border-r border-soft-gray/20">
-                      Question Number
+                      Question
                     </th>
                     <th className="px-4 py-3 text-center text-sm font-semibold text-warm-gray dark:text-off-white border-r border-soft-gray/20">
-                      1st Hint
+                      Hint 1
                     </th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-warm-gray dark:text-off-white border-r border-soft-gray/20">
+                      Hint 2
+                    </th>
+                    {/* ── Solution column — was missing before ── */}
                     <th className="px-4 py-3 text-center text-sm font-semibold text-warm-gray dark:text-off-white">
-                      2nd Hint
+                      Solution
                     </th>
                   </tr>
                 </thead>
+
                 <tbody className="divide-y divide-soft-gray/10">
-                  {/* Dynamic rows — one per parsed question */}
-                  {questionNumbers.map((questionNum) => {
-                    const questionHint = student.questionHints[questionNum];
+                  {questionNumbers.map((qNum) => {
+                    const qh = student.questionHints[qNum];
                     return (
-                      <tr key={questionNum} className="hover:bg-soft-gray/5 transition-colors">
+                      <tr key={qNum} className="hover:bg-soft-gray/5 transition-colors">
                         <td className="px-4 py-3 text-sm font-medium text-warm-gray dark:text-off-white border-r border-soft-gray/20">
-                          {questionNum}
+                          Q{qNum}
                         </td>
+
+                        {/* Hint 1 */}
                         <td className="px-4 py-3 text-center border-r border-soft-gray/20">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            questionHint?.firstHint
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                          }`}>
-                            {questionHint?.firstHint ? 'Yes' : 'No'}
-                          </span>
+                          <Badge active={!!qh?.firstHint} />
                         </td>
+
+                        {/* Hint 2 */}
+                        <td className="px-4 py-3 text-center border-r border-soft-gray/20">
+                          <Badge active={!!qh?.secondHint} />
+                        </td>
+
+                        {/* Solution */}
                         <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            questionHint?.secondHint
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                          }`}>
-                            {questionHint?.secondHint ? 'Yes' : 'No'}
-                          </span>
+                          <Badge active={!!qh?.solutionGiven} />
                         </td>
                       </tr>
                     );
@@ -168,10 +196,10 @@ export function TeacherDashboard() {
                     <td className="px-4 py-3 text-sm text-warm-gray dark:text-off-white border-r border-soft-gray/20">
                       TOTAL
                     </td>
-                    <td className="px-4 py-3 text-center text-sm text-warm-gray dark:text-off-white" colSpan={2}>
+                    <td className="px-4 py-3 text-center text-sm text-warm-gray dark:text-off-white" colSpan={3}>
                       <div className="flex items-center justify-center space-x-2">
                         <TrendingUp className="w-4 h-4 text-accent" />
-                        <span>Hints asked = {student.totalHints}</span>
+                        <span>Hints used: {student.totalHints}</span>
                       </div>
                     </td>
                   </tr>
@@ -181,7 +209,7 @@ export function TeacherDashboard() {
           </div>
         ))}
 
-        {/* No students in system */}
+        {/* No students yet */}
         {documentUploaded && questionCount > 0 && studentStats.length === 0 && (
           <div className="p-12 text-center">
             <BarChart3 className="w-12 h-12 text-soft-gray mx-auto mb-4" />
@@ -193,36 +221,32 @@ export function TeacherDashboard() {
     </div>
   );
 
+  // ────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-off-white dark:bg-dark-tone">
       <Header />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Navigation Tabs */}
+
+        {/* Tab bar */}
         <div className="flex space-x-1 bg-soft-gray/20 rounded-lg p-1 mb-8 max-w-md mx-auto">
-          <button
-            onClick={() => setActiveTab('upload')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-              activeTab === 'upload'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-warm-gray dark:text-off-white hover:text-accent'
-            }`}
-          >
-            Document Upload
-          </button>
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-              activeTab === 'analytics'
-                ? 'bg-accent text-white shadow-sm'
-                : 'text-warm-gray dark:text-off-white hover:text-accent'
-            }`}
-          >
-            Student Analytics
-          </button>
+          {(['upload', 'analytics'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
+                activeTab === tab
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-warm-gray dark:text-off-white hover:text-accent'
+              }`}
+            >
+              {tab === 'upload' ? 'Document Upload' : 'Student Analytics'}
+            </button>
+          ))}
         </div>
 
-        {activeTab === 'upload' ? (
+        {/* ── UPLOAD TAB ──────────────────────────────────────────────────── */}
+        {activeTab === 'upload' && (
           <div>
             <div className="text-center mb-12">
               <h1 className="text-4xl font-bold text-warm-gray dark:text-off-white mb-4">
@@ -235,6 +259,7 @@ export function TeacherDashboard() {
 
             <div className="bg-white dark:bg-warm-gray rounded-2xl shadow-xl p-8 max-w-2xl mx-auto">
               {!documentUploaded ? (
+                /* ── No document yet ── */
                 <div className="text-center">
                   <div className="w-24 h-24 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-6">
                     <Upload className="w-12 h-12 text-accent" />
@@ -243,9 +268,8 @@ export function TeacherDashboard() {
                   <h2 className="text-2xl font-bold text-warm-gray dark:text-off-white mb-4">
                     Upload your document
                   </h2>
-
                   <p className="text-soft-gray mb-8">
-                    Choose a PDF document that students can interact with using AI-powered Q&amp;A
+                    Choose a PDF document that students can interact with using AI-powered hints
                   </p>
 
                   <div className="relative">
@@ -256,14 +280,10 @@ export function TeacherDashboard() {
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       disabled={isUploading}
                     />
-
-                    <GlowButton
-                      disabled={isUploading}
-                      className="relative z-10 pointer-events-none"
-                    >
+                    <GlowButton disabled={isUploading} className="relative z-10 pointer-events-none">
                       {isUploading ? (
                         <div className="flex items-center space-x-2">
-                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                           <span>Processing PDF...</span>
                         </div>
                       ) : (
@@ -275,14 +295,13 @@ export function TeacherDashboard() {
                     </GlowButton>
                   </div>
 
-                  <p className="text-xs text-soft-gray mt-4">
-                    Supported format: PDF (Max size: 10MB)
-                  </p>
+                  <p className="text-xs text-soft-gray mt-4">Supported format: PDF (Max 10 MB)</p>
                   <p className="text-xs text-soft-gray mt-1">
                     Each new upload replaces the previous document and resets student analytics.
                   </p>
                 </div>
               ) : (
+                /* ── Document already uploaded ── */
                 <div className="text-center">
                   <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 transition-all duration-500 ${
                     uploadSuccess
@@ -294,15 +313,20 @@ export function TeacherDashboard() {
                     }`} />
                   </div>
 
-                  <h2 className="text-2xl font-bold text-warm-gray dark:text-off-white mb-4">
+                  <h2 className="text-2xl font-bold text-warm-gray dark:text-off-white mb-2">
                     Document Uploaded Successfully!
                   </h2>
 
+                  {/* Show filename if available */}
+                  {uploadedDocument && (
+                    <p className="text-sm text-soft-gray mb-4 font-medium">{uploadedDocument}</p>
+                  )}
+
                   <p className="text-soft-gray mb-8">
-                    Your document has been processed and is now available for students. The AI can now provide hints and solutions based on the content.
+                    Your document has been processed and is now available for students.
                   </p>
 
-                  <div className="bg-soft-gray/10 rounded-lg p-6">
+                  <div className="bg-soft-gray/10 rounded-lg p-6 mb-6">
                     <div className="flex items-center justify-center space-x-3 mb-3">
                       <FileText className="w-6 h-6 text-accent" />
                       <span className="font-medium text-warm-gray dark:text-off-white">
@@ -322,22 +346,12 @@ export function TeacherDashboard() {
                     </p>
                   </div>
 
-                  <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-                    <GlowButton
-                      variant="secondary"
-                      onClick={() => {
-                        setDocumentUploaded(false);
-                        setUploadedDocument(null);
-                        setDocumentText('');
-                        setUploadSuccess(false);
-                      }}
-                    >
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    {/* Fixed: goes through handleReplaceDocument which clears everything cleanly */}
+                    <GlowButton variant="secondary" onClick={handleReplaceDocument}>
                       Upload New Document
                     </GlowButton>
-                    <GlowButton
-                      variant="secondary"
-                      onClick={() => setActiveTab('analytics')}
-                    >
+                    <GlowButton variant="secondary" onClick={() => setActiveTab('analytics')}>
                       View Analytics →
                     </GlowButton>
                   </div>
@@ -345,7 +359,10 @@ export function TeacherDashboard() {
               )}
             </div>
           </div>
-        ) : (
+        )}
+
+        {/* ── ANALYTICS TAB ───────────────────────────────────────────────── */}
+        {activeTab === 'analytics' && (
           <div>
             <div className="text-center mb-8">
               <h1 className="text-4xl font-bold text-warm-gray dark:text-off-white mb-4">
@@ -355,11 +372,24 @@ export function TeacherDashboard() {
                 Track student progress and hint usage patterns
               </p>
             </div>
-
             <AnalyticsTable />
           </div>
         )}
+
       </main>
     </div>
+  );
+}
+
+// ── Shared badge component ───────────────────────────────────────────────────
+function Badge({ active }: { active: boolean }) {
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+      active
+        ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+        : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+    }`}>
+      {active ? 'Yes' : 'No'}
+    </span>
   );
 }
