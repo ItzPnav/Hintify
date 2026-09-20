@@ -1,0 +1,27 @@
+hintify roadmap
+
+
+Roadmap
+
+hint 2 and answers locked (only unlock hint 2 after 5 mins, only unlock answer after 10 mins) (we will put a button that onclick will open a dialogue box at center telling that we are overwriting the timer for product demonstration purposes) )
+
+dashboard table should dynamically change based on the Number of questions parsed by the pdf parser (x number of question parsed = x tuples having (hint 1, hint 2, solution)
+
+why are we using db ?, cant we store the hints of the questions only in the db 
+
+and the db should dynamically delete and update based on the pdf uploaded(that means, on pdf upload we should run a couple of command, if the db is empty and its first pdf thats uploaded, then in studentsDashboard should show the pdf viewer like usual, but if the teacher decided i want to upload a new pdf, the student dashboard should not replace old with new, rather the right panel should show like a list of items in a div box that are easy to click on to practice, each pdf should have its own hint 1, hint 2, and answers, [change the attributes in hints_log table with pdf name])
+
+whats the use of this `C:\pnav\projects\Hintify\backend\${DATA_DIR}\questions.json`
+(i kinda like it, lets not change it i guess)
+
+2 new features to add
+> student types answer to AI
+>AI will tell wether its 
+>1. its AI gen or not
+>2. Score % when compared to The AI answer
+
+Quiz for students
+(just like kahoot) (in quiz we will give like side hint button telling that student can use hint for this question)
+TeaCHER SIDE PERFORMANCE DASHBAORD
+
+The question generation with multiple choice answer type question is completely depenpdent on AI (that means , when we are uploading the pdf question bank for students to practice, the AI will also extract the subjects or topics it falls under and Will ask the teacher to generate a 7 question trivia fun challenge to students, just so that there are more indulged into this website)
